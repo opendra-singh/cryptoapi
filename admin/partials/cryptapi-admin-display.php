@@ -25,15 +25,25 @@ class WC_CryptAPI_Gateway extends WC_Payment_Gateway
         'iota' => 'IOTA',
     );
 
+    public static $COIN_MULTIPLIERS = [
+        'btc' => 100000000,
+        'bch' => 100000000,
+        'ltc' => 100000000,
+        'eth' => 1000000000000000000,
+        'iota' => 1000000,
+        'xmr' => 1000000000000,
+    ];
+
     function __construct()
     {
         $this->id = 'cryptapi';
         $this->has_fields = true;
         $this->method_title = 'CryptAPI';
         $this->method_description = 'CryptAPI allows customers to pay in cryptocurrency';
-
+        $this->initiliaze_url = '';
         $this->init_form_fields();
         $this->init_settings();
+        $this->cryptapi_settings();
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
     }
@@ -114,5 +124,258 @@ class WC_CryptAPI_Gateway extends WC_Payment_Gateway
                 'desc_tip' => true,
             ),
         );
+    }
+
+    function cryptapi_settings() {
+        $this->enabled = $this->get_option('enabled');
+        $this->title = $this->get_option('title');
+        $this->description = $this->get_option('description');
+        $this->cryptapi_coins = $this->get_option('coins');
+
+        foreach(array_keys($this->cryptapi_coin_options) as $coin) {
+            $this->{$coin . '_address'} = $this->get_option($coin . '_address');
+        }
+    }
+
+    function needs_setup()
+    {
+        if (empty($this->cryptapi_coins) || !is_array($this->cryptapi_coins)) return true;
+
+        foreach ($this->cryptapi_coins as $cryptapi_val) {
+            if (!empty($this->{$cryptapi_val . '_address'})) return false;
+        }
+
+        return true;
+    }
+
+    function payment_fields()
+    { ?>
+        <div class="form-row form-row-wide">
+            <p><?php echo isset( $this->description ) ? $this->description : ""; ?></p>
+            <ul style="list-style: none outside;">
+                <?php
+                if (!empty($this->cryptapi_coins) && is_array($this->cryptapi_coins)) {
+                    foreach ($this->cryptapi_coins as $cryptapi_val) {
+                        $cryptapi_addr = $this->{$cryptapi_val . '_address'};
+                        if (!empty($cryptapi_addr)) { ?>
+                            <li>
+                                <input id="payment_method_<?php echo isset( $cryptapi_val ) ? $cryptapi_val : ""; ?>" type="radio" class="input-radio" name="cryptapi_used_coin" value="<?php echo isset( $cryptapi_val ) ? $cryptapi_val : ""; ?>"/>
+                                <label for="payment_method_<?php echo isset( $cryptapi_val ) ? $cryptapi_val : ""; ?>" style="display: inline-block;"><?php echo __('Pay with', 'cryptapi') . ' ' . isset( $this->cryptapi_coin_options[$cryptapi_val] ) ? $this->cryptapi_coin_options[$cryptapi_val] : ""; ?></label>
+                            </li>
+                            <?php
+                        }
+                    }
+                } ?>
+            </ul>
+        </div>
+        <?php
+    }
+
+    function validate_fields()
+    {
+        return array_key_exists(sanitize_text_field($_POST['cryptapi_used_coin']), $this->cryptapi_coin_options);
+    }
+
+    function process_payment($order_id)
+    {
+        ini_set('display_errors', 1);
+        ini_set('display_startup_errors', 1);
+        error_reporting(E_ALL);
+
+        global $woocommerce;
+
+        if( isset( $_POST['cryptapi_used_coin'] ) && !empty( $_POST['cryptapi_used_coin'] ) ) {
+
+            $selected_coin = sanitize_text_field($_POST['cryptapi_used_coin']);
+
+            $sel_coin_addr = $this->{$selected_coin . '_address'};
+
+            if ( isset($sel_coin_addr) && !empty( $sel_coin_addr ) && isset($selected_coin) && !empty( $selected_coin ) ) {
+    
+                $nonce = wp_create_nonce();
+    
+                $base_url = 'https://api.cryptapi.io/';
+    
+                $prefix_url = "{$base_url}{$selected_coin}/create/";
+    
+                $order = new WC_Order( isset( $order_id ) ? $order_id : "" );
+    
+                $order_received_url = $order->get_checkout_order_received_url();
+                
+                if( isset( $prefix_url ) && !empty( $prefix_url ) ) {
+
+                    $send_first_url = add_query_arg(array(
+                        'address' => isset( $sel_coin_addr ) ? $sel_coin_addr : "" ,
+                        'callback' => isset( $order_received_url ) ? $order_received_url : "" ,
+                        'invoice' => isset( $order_id ) ? $order_id : "" ,
+                        'nonce' => isset( $nonce ) ? $nonce : "" ,
+                    ), $prefix_url);
+
+                    $this->initiliaze_url = isset( $send_first_url ) ? $send_first_url : "";
+    
+                    $curl_req_for_add = $this->cryptapi_use_curl( 'address' );
+
+                    if( isset( $curl_req_for_add ) && !empty( $curl_req_for_add ) && ( $curl_req_for_add == 'Success' ) ) {
+
+                        $total = $order->get_total('edit');
+
+                        $this->info_url = 'https://api.cryptapi.io/'.$selected_coin.'/info/';
+
+                        $info = $this->cryptapi_use_curl('info');
+
+                        $currency = get_woocommerce_currency();
+
+                        $price = floatval($info->prices->USD);
+
+                        if ( isset( $info->prices->{$currency} ) ) {
+                            $price = floatval( $info->prices->{$currency} );
+                        }
+
+                        $crypto_total = $this->round_sig( $total / $price, 5 );
+
+                        $min_tx = $this->convert_div( $info->minimum_transaction, $selected_coin );
+
+                        if ($crypto_total < $min_tx) {
+                            wc_add_notice(__('Payment error:', 'woocommerce') . __('Value too low, minimum is', 'cryptapi') . ' ' . $min_tx . ' ' . strtoupper($selected_coin), 'error');
+                            return null;
+                        }
+                        print_r($this->$cryptapi_coin_options);
+                        die;
+                        $order->add_meta_data( 'cryptapi_nonce', $nonce );
+                        $order->add_meta_data( 'cryptapi_address', $this->address_in );
+                        $order->add_meta_data( 'cryptapi_total', $crypto_total );
+                        $order->add_meta_data( 'cryptapi_currency', $selected_coin );
+                        $order->add_meta_data( 'cryptapi_currency_full_name', $this->$cryptapi_coin_options[$selected_coin] );
+                        $order->save_meta_data();
+    
+                        $order->update_status( 'on-hold', __( 'Awaiting payment', 'woothemes' ) . ': ' . $this->cryptapi_coin_options[$selected_coin] );
+                        $woocommerce->cart->empty_cart();
+    
+                        return array(
+                            'result' => 'success',
+                            'redirect' => $this->get_return_url( $order )
+                        );
+                    }
+                    else if( isset( $curl_req_for_add ) && !empty( $curl_req_for_add ) && ( $curl_req_for_add == 'error' ) ) {
+                        wc_add_notice(__( 'Payment error: ', 'woocommerce' ) . __( $this->error_msg, 'woocommerce' ), 'error' );
+                        return null;
+                    }
+                    else {
+                        wc_add_notice(__( 'Payment error: ', 'woocommerce' ) . __( 'Payment Could not be proccessed, try Again', 'woocommerce' ), 'error' );
+                        return null;
+                    }
+                }
+            }
+        }
+        else {
+            wc_add_notice(__( 'Payment error: ', 'woocommerce' ) . __( 'Choose Atleast one method to pay', 'woocommerce' ), 'error' );
+            return null;
+        }
+
+
+            // try {
+            //     $order = new WC_Order($order_id);
+            //     $total = $order->get_total('edit');
+            //     $currency = get_woocommerce_currency();
+
+            //     $info = CryptAPI\Helper::get_info($selected);
+                
+            //     $min_tx = CryptAPI\Helper::convert_div($info->minimum_transaction, $selected);
+
+            //     $price = floatval($info->prices->USD);
+            //     if (isset($info->prices->{$currency})) {
+            //         $price = floatval($info->prices->{$currency});
+            //     }
+
+            //     $crypto_total = $this->round_sig($total / $price, 5);
+
+            //     if ($crypto_total < $min_tx) {
+            //         wc_add_notice(__('Payment error:', 'woocommerce') . __('Value too low, minimum is', 'cryptapi') . ' ' . $min_tx . ' ' . strtoupper($selected), 'error');
+            //         return null;
+            //     }
+
+            //     $ca = new CryptAPI\Helper($selected, $addr, $callback_url, [], true);
+            //     $addr_in = $ca->get_address();
+
+            //     $order->add_meta_data('cryptapi_nonce', $nonce);
+            //     $order->add_meta_data('cryptapi_address', $addr_in);
+            //     $order->add_meta_data('cryptapi_total', $crypto_total);
+            //     $order->add_meta_data('cryptapi_currency', $selected);
+            //     $order->save_meta_data();
+
+            //     $order->update_status('on-hold', __('Awaiting payment', 'woothemes') . ': ' . $this->coin_options[$selected]);
+            //     $woocommerce->cart->empty_cart();
+
+            //     return array(
+            //         'result' => 'success',
+            //         'redirect' => $this->get_return_url($order)
+            //     );
+
+            // } catch (Exception $e) {
+            //     wc_add_notice(__('Payment error:', 'woothemes') . 'Unknown coin', 'error');
+            //     return;
+            // }
+
+        // wc_add_notice(__('Payment error:', 'woocommerce') . __('Payment could not be processed, please try again', 'woocommerce'), 'error');
+        // return null;
+    }
+
+    private function round_sig($number, $sigdigs = 5)
+    {
+        $multiplier = 1;
+        while ($number < 0.1) {
+            $number *= 10;
+            $multiplier /= 10;
+        }
+        while ($number >= 1) {
+            $number /= 10;
+            $multiplier *= 10;
+        }
+        return round($number, $sigdigs) * $multiplier;
+    }
+
+    private function cryptapi_use_curl( $ca_for )
+    {
+        $ca_curl = curl_init();
+        curl_setopt( $ca_curl, CURLOPT_HEADER, false );
+        curl_setopt( $ca_curl, CURLOPT_HTTPHEADER, array( 'Accept: application/json', 'Accept-Language: en_US' ) );
+        curl_setopt( $ca_curl, CURLOPT_VERBOSE, 1 );
+        curl_setopt( $ca_curl, CURLOPT_TIMEOUT, 30 );
+        if( $ca_for == 'address' ) {
+            curl_setopt( $ca_curl, CURLOPT_URL, $this->initiliaze_url );
+        }
+        else if( $ca_for == 'info' ) {
+            curl_setopt( $ca_curl, CURLOPT_URL, $this->info_url );
+        }
+        curl_setopt( $ca_curl, CURLOPT_RETURNTRANSFER, true );
+        curl_setopt( $ca_curl, CURLOPT_SSLVERSION, 6 );
+        $ca_curl_response = curl_exec( $ca_curl );
+        curl_close( $ca_curl );
+        if( $ca_for == 'address' ) {
+            $ca_curl_response_array = json_decode( $ca_curl_response, true );
+            if( isset( $ca_curl_response_array['status'] ) && !empty( $ca_curl_response_array['status'] ) ) {
+                if( $ca_curl_response_array['status'] == 'success' ) {
+                    $this->address_in = isset( $ca_curl_response_array['address_in'] ) ? $ca_curl_response_array['address_in'] : "";
+                    $this->address_out = isset( $ca_curl_response_array['address_out'] ) ? $ca_curl_response_array['address_out'] : "";
+                    $this->callback_url = isset( $ca_curl_response_array['callback_url'] ) ? $ca_curl_response_array['callback_url'] : "";
+                    $this->priority = isset( $ca_curl_response_array['priority'] ) ? $ca_curl_response_array['priority'] : "";
+                    return 'Success';
+                }
+                else if( $ca_curl_response_array['status'] == 'error' ) {
+                    $this->error_msg = isset( $ca_curl_response_array['error'] ) ? $ca_curl_response_array['error'] : "" ;
+                    return 'error';
+                }
+                else {
+                    return 'False';
+                }
+            }
+        }
+        else if( $ca_for == 'info' ) {
+            return json_decode( $ca_curl_response );
+        }
+    }
+
+    private function convert_div( $val, $coin ) {
+        return $val / WC_CryptAPI_Gateway::$COIN_MULTIPLIERS[$coin];
     }
 }

@@ -162,7 +162,7 @@ class Cryptapi {
 		$this->loader->add_action( 'plugins_loaded', $plugin_admin, 'cryptapi_loader' );
 
 	}
-
+	
 	/**
 	 * Register all of the hooks related to the public-facing functionality
 	 * of the plugin.
@@ -176,6 +176,7 @@ class Cryptapi {
 
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+		$this->loader->add_action( 'woocommerce_thankyou_cryptapi', $plugin_public, 'cryptapi_thankyou_page' );
 
 	}
 

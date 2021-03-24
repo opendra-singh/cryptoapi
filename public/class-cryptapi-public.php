@@ -40,6 +40,15 @@ class Cryptapi_Public {
 	 */
 	private $version;
 
+	public static $COIN_MULTIPLIERS = [
+        'btc' => 100000000,
+        'bch' => 100000000,
+        'ltc' => 100000000,
+        'eth' => 1000000000000000000,
+        'iota' => 1000000,
+        'xmr' => 1000000000000,
+    ];
+
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -99,5 +108,51 @@ class Cryptapi_Public {
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/cryptapi-public.js', array( 'jquery' ), $this->version, false );
 
 	}
+
+	function cryptapi_thankyou_page( $order_id ) {
+
+		$order = new WC_Order( $order_id );
+        $total = $order->get_total();
+        $currency_symbol = get_woocommerce_currency_symbol();
+        $address_in = $order->get_meta('cryptapi_address');
+        $crypto_value = $order->get_meta('cryptapi_total');
+        $crypto_coin = $order->get_meta('cryptapi_currency');
+        $crypto_coin_full_name = $order->get_meta('cryptapi_currency_full_name');
+
+		$show_crypto_coin = $crypto_coin;
+        if ($show_crypto_coin == 'iota') $show_crypto_coin = 'miota';
+
+		$qr_value = $crypto_value;
+        if (in_array($crypto_coin, array('eth', 'iota'))) $qr_value = $this->convert_mul( $crypto_value, $crypto_coin );
+
+		// wp_enqueue_style( 'qr-code-css', plugin_dir_url( __FILE__ ) . 'css/styles.css', array(), $this->version, 'all' );
+		wp_enqueue_script( 'qr-code-min', plugin_dir_url( __FILE__ ) . 'js/kjua-0.9.0.min.js', array( 'jquery' ), $this->version, false );
+		wp_enqueue_script( 'qr-code-script', plugin_dir_url( __FILE__ ) . 'js/scripts.js', array( 'jquery' ), $this->version, false );
+		?>
+		<div id="container" class='ca_slite_container'>
+			<div class='ca_right_hide'>
+				<textarea class='ca_right_hide' id="text"></textarea>
+				<input type='hidden' class='ca_right_hide' id="address" value='<?php echo $address_in; ?>' />
+				<input class='ca_right_hide' type='hidden' id="currency" value='<?php echo $crypto_coin_full_name; ?>' />
+				<input class='ca_right_hide' type='hidden' id="amount" value='<?php echo $qr_value; ?>' />
+			</div>
+			<div class="ca_right_hide">
+				<input class="ca_right_hide" id="image" type="file" />
+			</div>
+		</div>
+		<div style="width: 100%; margin: 2rem auto; text-align: center;">
+			<?php echo __('In order to confirm your order, please send', 'cryptapi') ?>
+			<span style="font-weight: 500"><?php echo $crypto_value ?></span>
+			<span style="font-weight: 500"><?php echo strtoupper($show_crypto_coin) ?></span>
+			(<?php echo $currency_symbol . ' ' . $total; ?>)
+			<?php echo __('to', 'cryptapi') ?>
+			<span style="font-weight: 500"><?php echo $address_in ?></span>
+		</div>
+		<?php
+	}
+
+	private function convert_mul( $val, $coin ) {
+        return $val / Cryptapi_Public::$COIN_MULTIPLIERS[$coin];
+    }
 
 }

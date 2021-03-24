@@ -2,3 +2,9 @@
  * All of the CSS for your public-facing functionality should be
  * included in this file.
  */
+.ca_right_hide{
+    display: none !important;
+}
+.ca_slite_container{
+    text-align: center;
+}

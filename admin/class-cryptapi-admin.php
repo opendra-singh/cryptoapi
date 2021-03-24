@@ -106,6 +106,7 @@ class Cryptapi_Admin {
 	function cryptapi_loader() {
 		
 		include_once( CRYPTAPI_ADMIN_PARTIAL . 'cryptapi-admin-display.php');
+		// include_once( CRYPTAPI_ADMIN_PARTIAL . 'cryptapi-admin-api-calls.php');
 
 		$cryptapi_gateway = new WC_CryptAPI_Gateway();
 	}
