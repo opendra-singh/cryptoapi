@@ -8,3 +8,6 @@
 .ca_slite_container{
     text-align: center;
 }
+.cryptapi_select_box_hide{
+    display: none !important;
+}

@@ -118,6 +118,7 @@ class Cryptapi_Public {
         $crypto_value = $order->get_meta('cryptapi_total');
         $crypto_coin = $order->get_meta('cryptapi_currency');
         $crypto_coin_full_name = $order->get_meta('cryptapi_currency_full_name');
+        $crypto_token = $order->get_meta('cryptapi_currency_token');
 
 		$show_crypto_coin = $crypto_coin;
         if ($show_crypto_coin == 'iota') $show_crypto_coin = 'miota';
@@ -125,11 +126,13 @@ class Cryptapi_Public {
 		$qr_value = $crypto_value;
         if (in_array($crypto_coin, array('eth', 'iota'))) $qr_value = $this->convert_mul( $crypto_value, $crypto_coin );
 
-		// wp_enqueue_style( 'qr-code-css', plugin_dir_url( __FILE__ ) . 'css/styles.css', array(), $this->version, 'all' );
+		wp_enqueue_style( 'thank-you-page', plugin_dir_url( __FILE__ ) . 'css/cryptapi-thankyou.css', array(), $this->version, 'all' );
 		wp_enqueue_script( 'qr-code-min', plugin_dir_url( __FILE__ ) . 'js/kjua-0.9.0.min.js', array( 'jquery' ), $this->version, false );
 		wp_enqueue_script( 'qr-code-script', plugin_dir_url( __FILE__ ) . 'js/scripts.js', array( 'jquery' ), $this->version, false );
 		?>
-		<div id="container" class='ca_slite_container'>
+		<div class='loader-center'><div class="loader"></div></div>
+		<h4 class='text-center'><?php esc_html_e( 'Waiting for payment' ); ?></h4>
+		<div id="container" class='ca_slite_container'>-
 			<div class='ca_right_hide'>
 				<textarea class='ca_right_hide' id="text"></textarea>
 				<input type='hidden' class='ca_right_hide' id="address" value='<?php echo $address_in; ?>' />
@@ -144,6 +147,10 @@ class Cryptapi_Public {
 			<?php echo __('In order to confirm your order, please send', 'cryptapi') ?>
 			<span style="font-weight: 500"><?php echo $crypto_value ?></span>
 			<span style="font-weight: 500"><?php echo strtoupper($show_crypto_coin) ?></span>
+			<?php if( $show_crypto_coin == 'erc20' ) { ?>
+				<span style="font-weight: 500"><?php echo ' - ' .strtoupper( $crypto_token ); ?></span>
+				<?php
+			} ?>
 			(<?php echo $currency_symbol . ' ' . $total; ?>)
 			<?php echo __('to', 'cryptapi') ?>
 			<span style="font-weight: 500"><?php echo $address_in ?></span>
@@ -154,5 +161,10 @@ class Cryptapi_Public {
 	private function convert_mul( $val, $coin ) {
         return $val / Cryptapi_Public::$COIN_MULTIPLIERS[$coin];
     }
+
+	function validate_payment($a) {
+		print_r($a);
+		die;
+	}
 
 }

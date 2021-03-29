@@ -28,5 +28,18 @@
 	 * Although scripts in the WordPress core, Plugins and Themes may be
 	 * practising this, we should strive to set a better example in our own work.
 	 */
+	$(document).ready(function(){
+		if( ( $(document).find('#cryptapi_erc_active').val() != '' ) && ( $(document).find('#cryptapi_erc_active').val() == 'yes' ) ) {
+			$(document).on('click', '.payment_selected_coin', function(){
+				if( $(this).val() != '' && $(this).val() == 'erc20' ) {
+					$(document).find('#cryptapi_select_box').removeClass('cryptapi_select_box_hide');
+				}
+				else
+				{
+					$(document).find('#cryptapi_select_box').addClass('cryptapi_select_box_hide');
+				}
+			})
+		}
+	})
 
 })( jQuery );

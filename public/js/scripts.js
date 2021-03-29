@@ -37,14 +37,6 @@
         return els;
     }
 
-    function update_gui() {
-        gui_val_pairs.forEach(function (pair) {
-            var label = all('label[for="' + pair[0] + '"]')[0];
-            var text = label.innerHTML;
-            label.innerHTML = text.replace(/:.*$/, ': ' + val_by_id(pair[0]) + pair[1]);
-        });
-    }
-
     function update_qrcode() {
         var options = {
             render: 'canvas',
@@ -85,7 +77,6 @@
     }
 
     function update() {
-        // update_gui();
         update_qrcode();
     }
 

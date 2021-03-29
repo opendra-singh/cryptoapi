@@ -177,6 +177,7 @@ class Cryptapi {
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 		$this->loader->add_action( 'woocommerce_thankyou_cryptapi', $plugin_public, 'cryptapi_thankyou_page' );
+		$this->loader->add_action( 'woocommerce_api_wc_gateway_cryptapi', $plugin_public, 'validate_payment' );
 
 	}
 
